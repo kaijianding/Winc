@@ -1,6 +1,7 @@
 //! 侧栏顶上的几何：文件树工具栏、折叠工具、视图切换的分段按钮、红绿灯让出的位置。
 
 use super::*;
+use crate::app::Focus;
 use winc_i18n::t;
 
 /// 文件树工具栏上的按钮。
@@ -137,18 +138,74 @@ pub enum SidebarView {
     Commit,
 }
 
+/// 一个侧栏视图的全部登记信息：显示名、切换它的命令、点开之后焦点落在哪里、分段里的图标。
+///
+/// 新增视图时在这里添一项，并补上 `SidebarView` 变体对应的绘制：分段控件的顺序、悬停提示、
+/// 快捷键、命令面板里的条目、点击分段后的动作、焦点落点都从这一张表来，不再分散到各处 match。
+pub struct SidebarPage {
+    /// 视图本身，也是分段控件里的顺序。
+    pub view: SidebarView,
+    /// 切换它的命令：承担快捷键、命令面板条目和悬停提示里的按键。
+    pub action: Action,
+    /// 点开后焦点落在哪里。
+    pub focus: Focus,
+    /// 分段里的图标；`scale` 为主轴尺寸，`clip` 是允许绘制的范围。
+    pub icon: fn(&mut Frame<'_>, (f32, f32), f32, Color, Rect),
+}
+
+impl SidebarPage {
+    /// 返回悬停提示文字（含快捷键）。
+    pub fn label(&self) -> String {
+        with_key(self.view.title(), Some(self.action))
+    }
+}
+
+/// 总是有的两个视图，顺序即视图切换里的顺序。
+pub const BASE_PAGES: [&SidebarPage; 2] = [
+    &SidebarPage {
+        view: SidebarView::Files,
+        action: Action::ShowFiles,
+        focus: Focus::Tree,
+        icon: icons::files,
+    },
+    &SidebarPage {
+        view: SidebarView::Search,
+        action: Action::FindInFiles,
+        focus: Focus::GlobalQuery,
+        icon: icons::search,
+    },
+];
+
+/// 目录在仓库里才有的提交视图。它没有固定的焦点，点开时由 `App::show_commit` 决定。
+pub const COMMIT_PAGE: SidebarPage = SidebarPage {
+    view: SidebarView::Commit,
+    action: Action::ShowCommit,
+    focus: Focus::CommitList,
+    icon: icons::git,
+};
+
 impl SidebarView {
+    /// 返回视图的名字，用于分段按钮的悬停提示。
+    pub fn title(self) -> &'static str {
+        match self {
+            SidebarView::Files => t!("workspace-sidebar-files"),
+            SidebarView::Search => t!("workspace-sidebar-search"),
+            SidebarView::Commit => t!("workspace-sidebar-commit"),
+        }
+    }
+
+    /// 返回这个视图的登记信息。
+    pub fn page(self) -> &'static SidebarPage {
+        match self {
+            SidebarView::Files => BASE_PAGES[0],
+            SidebarView::Search => BASE_PAGES[1],
+            SidebarView::Commit => &COMMIT_PAGE,
+        }
+    }
+
     /// 返回悬停提示文字（含快捷键）。
     pub fn label(self) -> String {
-        match self {
-            SidebarView::Files => with_key(t!("workspace-sidebar-files"), Some(Action::ShowFiles)),
-            SidebarView::Search => {
-                with_key(t!("workspace-sidebar-search"), Some(Action::FindInFiles))
-            }
-            SidebarView::Commit => {
-                with_key(t!("workspace-sidebar-commit"), Some(Action::ShowCommit))
-            }
-        }
+        self.page().label()
     }
 }
 
@@ -165,9 +222,6 @@ pub fn traffic_lights_end() -> f32 {
 pub fn set_traffic_lights_end(end: f32) -> bool {
     LIGHTS_END.swap(end.to_bits(), Ordering::Relaxed) != end.to_bits()
 }
-
-/// 总是有的两个侧栏视图。
-pub const BASE_VIEWS: [SidebarView; 2] = [SidebarView::Files, SidebarView::Search];
 
 /// 返回红绿灯右侧第一个按钮的左边缘：侧栏收起时是侧栏开关，展开时是侧栏顶部的「文件」切换。
 ///
@@ -193,11 +247,12 @@ pub const SEGMENT_SPACING: f32 = 2.0;
 pub const SEGMENT_GAP: f32 = 6.0;
 
 /// 返回顶栏里视图切换（「文件」「搜索」以及模块提供的视图）每一段的位置，顺序同 `views`：
-/// 分段控件靠侧栏 `sidebar` 的右端（离右边 8 像素，与第二行右端的按钮对齐），侧栏窄到挨着
-/// 侧栏开关 `toggle` 时停在开关右边 [`SEGMENT_GAP`] 处，与开关垂直居中对齐。
+/// 分段控件靠侧栏 `sidebar` 的右端（离右边 8 像素，与第二行右端的按钮对齐）；侧栏窄到放不下
+/// 全部段与它和开关之间的 [`SEGMENT_GAP`] 时，多出的段不再硬挤，而是等宽压缩（见
+/// [`segment_w`]），保证与开关之间、与侧栏右端都留出原有的距离。
 ///
 /// 每一段带一个显示比例（0–1），平时是 1：模块的视图出现、消失途中，对应的一段和前面的缝
-/// 按比例变窄，底槽跟着伸缩，整个控件仍靠右；超出侧栏的部分由调用方裁掉。
+/// 按比例变窄，底槽跟着伸缩，整个控件仍靠右。
 pub fn view_tabs(
     toggle: Rect,
     sidebar: Rect,
@@ -205,12 +260,22 @@ pub fn view_tabs(
 ) -> Vec<(Rect, SidebarView)> {
     // 每段前面的缝；第一段前面没有。
     let gap = |i: usize| if i == 0 { 0.0 } else { SEGMENT_SPACING };
-    let widths = views
+    let natural = views
         .iter()
         .enumerate()
-        .map(|(i, v)| (SEGMENT_W + gap(i)) * v.1);
-    let track_w = widths.sum::<f32>() + 4.0;
-    let left = (sidebar.right() - 8.0 - track_w).max(toggle.right() + SEGMENT_GAP) + 2.0;
+        .map(|(i, v)| (SEGMENT_W + gap(i)) * v.1)
+        .sum::<f32>()
+        + 4.0;
+    let room = sidebar.right() - 8.0 - toggle.right() - SEGMENT_GAP;
+    let w = segment_w(views.len(), room);
+    let gaps = SEGMENT_SPACING * (views.len().saturating_sub(1)) as f32;
+    // 压缩时整条按实际段宽重排，宽度之和不超过 `room`；放得下时按原样从右端排开。
+    let track_w = if w < SEGMENT_W {
+        w * views.len() as f32 + gaps + 4.0
+    } else {
+        natural
+    };
+    let left = sidebar.right() - 8.0 - track_w + 2.0;
     let y = toggle.y + (toggle.h - SEGMENT_H) / 2.0;
     let mut x = left;
     views
@@ -218,9 +283,24 @@ pub fn view_tabs(
         .enumerate()
         .map(|(i, &(view, share))| {
             x += gap(i) * share;
-            let rect = Rect::new(x, y, SEGMENT_W * share, SEGMENT_H);
-            x += rect.w;
+            let rect = Rect::new(x, y, w * share, SEGMENT_H);
+            x += w * share;
             (rect, view)
         })
         .collect()
+}
+
+/// 返回视图切换里每一段的宽度：放得下时是 [`SEGMENT_W`]，`room` 不够时等宽压缩。
+///
+/// 侧栏窄到连图标都放不下时照样按比例缩，按钮里的图标由绘制方按段宽裁剪，不会压到旁边一段上。
+pub fn segment_w(count: usize, room: f32) -> f32 {
+    let room = room.max(0.0);
+    if count <= 1 {
+        return SEGMENT_W.min(room);
+    }
+    let natural = SEGMENT_W * count as f32 + SEGMENT_SPACING * (count - 1) as f32;
+    if natural <= room {
+        return SEGMENT_W;
+    }
+    ((room - SEGMENT_SPACING * (count - 1) as f32) / count as f32).max(0.0)
 }

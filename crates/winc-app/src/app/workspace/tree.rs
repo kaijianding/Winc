@@ -334,13 +334,19 @@ impl App {
     /// 显示时焦点交给文件树或搜索输入框，隐藏时还给编辑区；焦点在终端里时保持不变。
     pub(in crate::app) fn toggle_sidebar(&mut self) {
         self.set_sidebar(!self.panels.sidebar.visible);
-        self.focus = match (self.panels.sidebar.visible, self.panels.sidebar.view) {
-            (true, SidebarView::Files) => Focus::Tree,
-            (true, SidebarView::Search) => Focus::GlobalQuery,
-            (true, SidebarView::Commit) => self.commit_view_focus(),
-            (false, _) if self.focus == Focus::Terminal => Focus::Terminal,
-            (false, _) => Focus::Editor,
+        self.focus = match self.panels.sidebar.visible {
+            true => self.sidebar_view_focus(),
+            false if self.focus == Focus::Terminal => Focus::Terminal,
+            false => Focus::Editor,
         };
+    }
+
+    /// 当前侧栏视图点开之后焦点落在哪里。
+    pub(in crate::app) fn sidebar_view_focus(&mut self) -> Focus {
+        match self.panels.sidebar.view {
+            SidebarView::Commit => self.commit_view_focus(),
+            view => view.page().focus,
+        }
     }
 
     /// 返回可能需要展开显示全名的文件树行序号：鼠标悬停在文件树的行或分隔条上时，

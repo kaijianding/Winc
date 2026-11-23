@@ -299,9 +299,9 @@ impl App {
         // 点击切换按钮：已在该页时也把焦点交给它（文件树或搜索输入框）。
         if let Some(view) = hit(&self.sidebar_tabs(), x, y) {
             match view {
-                SidebarView::Files => self.show_files(),
                 SidebarView::Search => self.show_global_search(false, None),
                 SidebarView::Commit => self.show_commit(),
+                view => self.show_sidebar_view(view),
             }
 
             return true;

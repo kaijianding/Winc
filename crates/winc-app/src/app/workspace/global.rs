@@ -462,16 +462,24 @@ impl App {
         self.request_redraw();
     }
 
-    /// 把侧栏切换到文件树，并把焦点交给文件树（`⇧⌘E`）。
-    pub(in crate::app) fn show_files(&mut self) {
-        self.set_sidebar_view(SidebarView::Files);
+    /// 把侧栏切换到 `view` 并展开，焦点落在该视图登记的位置上。
+    ///
+    /// 模块视图另外需要准备的（搜索的输入框、提交视图的刷新）由各自的命令处理，这里只做共同的
+    /// 部分：切换视图、展开侧栏、交还焦点。
+    pub(in crate::app) fn show_sidebar_view(&mut self, view: SidebarView) {
+        self.set_sidebar_view(view);
 
         if !self.panels.sidebar.visible {
             self.set_sidebar(true);
         }
 
-        self.focus = Focus::Tree;
+        self.focus = self.sidebar_view_focus();
         self.request_redraw();
+    }
+
+    /// 把侧栏切换到文件树，并把焦点交给文件树（`⇧⌘E`）。
+    pub(in crate::app) fn show_files(&mut self) {
+        self.show_sidebar_view(SidebarView::Files);
     }
 
     /// 把侧栏切换到搜索面板，并把焦点放进查找输入框（`⇧⌘F` / `⇧⌘H`）。

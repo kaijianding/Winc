@@ -233,11 +233,7 @@ impl App {
             self.update_state(move |state| state.rename_folder(&real, &root));
         }
         self.folder_opened();
-        self.focus = match self.panels.sidebar.view {
-            SidebarView::Files => Focus::Tree,
-            SidebarView::Search => Focus::GlobalQuery,
-            SidebarView::Commit => self.commit_view_focus(),
-        };
+        self.focus = self.sidebar_view_focus();
 
         let Some(root) = self.editor.root().map(Path::to_path_buf) else {
             return;

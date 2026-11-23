@@ -11,7 +11,7 @@ use winit::keyboard::NamedKey;
 use super::*;
 use crate::field::TextField;
 use crate::keymap::{Action, Context, Group};
-use crate::layout::{PanelButton, SearchButton, SettingsPage, SidebarView};
+use crate::layout::{PanelButton, SearchButton, SettingsPage};
 
 impl App {
     /// 执行 `action`，返回是否已处理。
@@ -778,10 +778,6 @@ impl App {
         if !self.panels.sidebar.visible {
             self.set_sidebar(true);
         }
-        self.focus = match self.panels.sidebar.view {
-            SidebarView::Files => Focus::Tree,
-            SidebarView::Search => Focus::GlobalQuery,
-            SidebarView::Commit => self.commit_view_focus(),
-        };
+        self.focus = self.sidebar_view_focus();
     }
 }

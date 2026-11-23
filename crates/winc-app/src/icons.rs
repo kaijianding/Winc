@@ -620,7 +620,13 @@ pub fn locate(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: R
 }
 
 /// 绘制「以列表显示」图标，约 12×10：左侧三个圆点，右侧三道等长的横线，表示平铺的各行。
-pub fn list_view(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {
+pub fn list_view(
+    frame: &mut Frame<'_>,
+    (cx, cy): (f32, f32),
+    _scale: f32,
+    color: Color,
+    clip: Rect,
+) {
     let rows = [cy - 4.0, cy, cy + 4.0];
     // 零长度的线段描边后呈圆点。
     let dots = rows.map(|y| Stroke::Line(cx - 5.0, y, cx - 5.0, y));

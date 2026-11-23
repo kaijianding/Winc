@@ -194,7 +194,7 @@ fn the_sidebar_toggle_stays_next_to_the_traffic_lights() {
     let tabs = view_tabs(
         open.sidebar_button,
         open.sidebar,
-        &BASE_VIEWS.map(|v| (v, 1.0)),
+        &BASE_PAGES.map(|page| (page.view, 1.0)),
     );
     let (files, search) = (tabs[0].0, tabs[1].0);
     let last = tabs.last().unwrap().0;
@@ -217,7 +217,7 @@ fn the_sidebar_toggle_stays_next_to_the_traffic_lights() {
     );
     let all = [SidebarView::Files, SidebarView::Search, SidebarView::Commit].map(|v| (v, 1.0));
     let tabs = view_tabs(narrow.sidebar_button, narrow.sidebar, &all);
-    assert!(tabs[0].0.x - 2.0 >= narrow.sidebar_button.right() + SEGMENT_GAP);
+    assert!(tabs[0].0.x >= narrow.sidebar_button.right() + SEGMENT_GAP);
     assert!(tabs.last().unwrap().0.right() + 2.0 <= narrow.sidebar.right() - 8.0);
     // 「提交」一段出现到一半：它和前面的缝都只有一半宽，整个控件仍靠右，前两段往右让出一半。
     let mut growing = all;
@@ -428,4 +428,33 @@ fn drawn_scroll_positions_are_whole_pixels() {
         assert_eq!(px.fract(), 0.0, "{line}");
         assert!((px - line * f64::from(lh)).abs() <= 0.5, "{line}");
     }
+}
+
+/// 视图切换在侧栏窄到放不下时等宽压缩，压缩后仍夹在开关和侧栏右端之间。
+#[test]
+fn view_tabs_shrink_when_the_sidebar_is_narrow() {
+    // 窄窗口下侧栏被压到最窄，三段（含模块的「提交」）放不下。
+    let narrow = Layout::compute(
+        MIN_PANEL_WIDTH + 320.0,
+        600.0,
+        MIN_PANEL_WIDTH,
+        1.0,
+        0,
+        0,
+        40.0,
+        STATUS_HEIGHT,
+    );
+    assert_eq!(
+        narrow.sidebar.w,
+        MIN_PANEL_WIDTH - ISLAND_MARGIN - ISLAND_GAP / 2.0
+    );
+    let views = [SidebarView::Files, SidebarView::Search, SidebarView::Commit].map(|v| (v, 1.0));
+    // 压缩后每段窄于 `SEGMENT_W`：三段加上缝和外面的 4 像素底槽，宽度不超过开关与侧栏右端之间
+    // 的空间。
+    let room = narrow.sidebar.right() - 8.0 - narrow.sidebar_button.right() - SEGMENT_GAP;
+    let w = segment_w(views.len(), room);
+    let tabs = view_tabs(narrow.sidebar_button, narrow.sidebar, &views);
+    assert!(tabs.iter().all(|(rect, _)| rect.w == w));
+    assert!(tabs[0].0.x >= narrow.sidebar_button.right() + SEGMENT_GAP);
+    assert!(tabs.last().unwrap().0.right() + 2.0 <= narrow.sidebar.right() - 8.0);
 }

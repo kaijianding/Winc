@@ -246,7 +246,7 @@ pub(in crate::view) fn draw_files_title(
     let at = (cx, button.y + button.h / 2.0);
     match flat {
         true => icons::tree_view(frame, at, ink, area),
-        false => icons::list_view(frame, at, ink, area),
+        false => icons::list_view(frame, at, 1.0, ink, area),
     }
     button
 }

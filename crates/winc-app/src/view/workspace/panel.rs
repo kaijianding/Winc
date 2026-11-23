@@ -93,11 +93,7 @@ pub(super) fn draw_view_tabs(app: &App, frame: &mut Frame<'_>) {
         } else {
             (color, VIEW_ICON, clip)
         };
-        match view {
-            SidebarView::Files => icons::files(frame, center(rect), scale, color, clip),
-            SidebarView::Search => icons::search(frame, center(rect), scale, color, clip),
-            SidebarView::Commit => icons::git(frame, center(rect), scale, color, clip),
-        }
+        (view.page().icon)(frame, center(rect), scale, color, clip);
         if view == SidebarView::Commit && share >= 1.0 && app.commit_count_text().is_some() {
             draw_change_dot(frame, p, rect, base, clip);
         }
@@ -210,7 +206,9 @@ fn draw_panel_header(app: &App, frame: &mut Frame<'_>, parts: &PanelParts) {
             PanelTool::Clear => icons::clear_results(frame, c, color, header),
             PanelTool::OpenDialog => icons::float_window(frame, c, color, header),
             // 图标是点击后换成的显示方式，同日志里文件列表的开关。
-            PanelTool::Layout if app.search_tree() => icons::list_view(frame, c, color, header),
+            PanelTool::Layout if app.search_tree() => {
+                icons::list_view(frame, c, 1.0, color, header)
+            }
             PanelTool::Layout => icons::tree_view(frame, c, color, header),
             PanelTool::CollapseAll if app.panels.global.all_collapsed() => {
                 icons::expand_all(frame, c, color, header);
